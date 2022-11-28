@@ -2,20 +2,22 @@
 
 #include <ESP8266WiFi.h>
 #include <Wire.h>
-#include <EEPROM.h>
 #include <Hash.h>
+#include <MPU6050.h>
 
 #include "smart_basket.hpp"
-#include "accelerometer.hpp"
 
 #include "config.h"
 
 uint32_t g_basket_id;
 
 WiFiClient g_wifi_client; // https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiClient.h
+MPU6050 g_mpu; // https://github.com/pinchy/MPU6050
 
 int32_t g_basket_fsm_state = SMP_BASKET_FSM_NOT_DETECTED;
-int32_t g_basket_detected_timestamp = 0;
+uint64_t g_basket_detected_timestamp = 0;
+
+uint64_t g_accelerometer_query_timestamp = 0;
 
 int32_t g_custom_button_fsm_state = 0;
 
@@ -26,7 +28,8 @@ struct smp_packet_basket_payload
 struct smp_packet_accelerometer_data_payload
 {
     float m_accel_x, m_accel_y, m_accel_z;
-    float m_temperature;
+    float m_gyro_x, m_gyro_y, m_gyro_z;
+    float m_temp;
 };
 
 struct smp_packet_custom_button_payload
@@ -135,6 +138,7 @@ uint32_t smp_derive_basket_id()
 void setup()
 { 
     Serial.begin(115200);
+    Wire.begin();
 
     // Basket ID is derived on initialization from WiFi module's MAC address. This is done
     // in order to ensure to always have a unique and permanent Basket ID
@@ -158,14 +162,14 @@ void setup()
 #endif
 
 #ifdef SMP_ACCELEROMETER
-    smp_accelerometer_init();
+    g_mpu.begin();
+    g_mpu.calibrate();
 #endif
 }
 
 void loop()
 {
     smp_packet_basket_payload basket_payload{};
-    smp_accelerometer_data accelerometer_data{};
     smp_packet_accelerometer_data_payload accelerometer_data_payload{};
 
     // Re-try to connect if the connection was lost
@@ -217,25 +221,32 @@ void loop()
     // ----------------------------------------------------------------
 
 #ifdef SMP_ACCELEROMETER
-    smp_accelerometer_read_data(accelerometer_data);
-    
-    /*
-    SMP_DEBUG_SERIAL_PRINTF("ACCELEROMETER AcX: %d, AcY: %d, AcZ: %d, Tmp: %d, GyX: %d, GyY: %d\n",
-        accelerometer_data.m_AcX,
-        accelerometer_data.m_AcY,
-        accelerometer_data.m_AcZ,
-        accelerometer_data.m_Tmp,
-        accelerometer_data.m_GyX,
-        accelerometer_data.m_GyY,
-        accelerometer_data.m_GyZ
-    );
-    */
+    if ((millis() - g_accelerometer_query_timestamp) >= 500)
+    {
+        g_mpu.update();
 
-    accelerometer_data_payload.m_accel_x = 21.0; // TODO
-    accelerometer_data_payload.m_accel_y = 22.0; // TODO
-    accelerometer_data_payload.m_accel_z = 23.0; // TODO
-    accelerometer_data_payload.m_temperature = 32.0; // TODO
+        vector_t accel = g_mpu.getAcceleration();
+        vector_t gyro = g_mpu.getGyro();
+        attitude_t attitude = g_mpu.getAttitude();
+        float temp = g_mpu.getTemperature();
 
-    SMP_SEND_PACKET_ACCELEROMETER_DATA(accelerometer_data_payload);
+        Serial.printf("AccelX: %f, AccelY: %f, AccelZ: %f, GyroX: %f, GyroY: %f, GyroZ: %f, Temp: %f\n",
+            accel.x, accel.y, accel.z,
+            gyro.x, gyro.y, gyro.z,
+            temp
+        );
+
+        accelerometer_data_payload.m_accel_x = accel.x;
+        accelerometer_data_payload.m_accel_y = accel.y;
+        accelerometer_data_payload.m_accel_z = accel.z;
+        accelerometer_data_payload.m_gyro_x  = gyro.x;
+        accelerometer_data_payload.m_gyro_y  = gyro.y;
+        accelerometer_data_payload.m_gyro_z  = gyro.z;
+        accelerometer_data_payload.m_temp    = temp;
+
+        SMP_SEND_PACKET_ACCELEROMETER_DATA(accelerometer_data_payload);
+
+        g_accelerometer_query_timestamp = millis();
+    }
 #endif
 }
