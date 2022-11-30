@@ -9,6 +9,9 @@
 
 #include "config.h"
 
+#define SMP_MPU_FSM_INIT      0
+#define SMP_MPU_FSM_READ_DATA 1
+
 uint32_t g_basket_id;
 
 WiFiClient g_wifi_client; // https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiClient.h
@@ -17,7 +20,8 @@ MPU6050 g_mpu; // https://github.com/pinchy/MPU6050
 int32_t g_basket_fsm_state = SMP_BASKET_FSM_NOT_DETECTED;
 uint64_t g_basket_detected_timestamp = 0;
 
-uint64_t g_accelerometer_query_timestamp = 0;
+int g_mpu_state = SMP_MPU_FSM_INIT;
+uint64_t g_mpu_query_timestamp = 0;
 
 int32_t g_custom_button_fsm_state = 0;
 
@@ -160,11 +164,6 @@ void setup()
 #ifdef SMP_CUSTOM_BUTTON_1
     pinMode(SMP_CUSTOM_BUTTON_1_PIN, INPUT);
 #endif
-
-#ifdef SMP_ACCELEROMETER
-    g_mpu.begin();
-    g_mpu.calibrate();
-#endif
 }
 
 void loop()
@@ -221,20 +220,34 @@ void loop()
     // ----------------------------------------------------------------
 
 #ifdef SMP_ACCELEROMETER
-    if ((millis() - g_accelerometer_query_timestamp) >= 500)
+    if (
+        Wire.status() == I2C_OK &&
+        !g_mpu.available()
+    )
+    {
+        //Serial.printf("MPU6050 lost\n");
+
+        g_mpu_state = SMP_MPU_FSM_INIT;
+    }
+
+    if (
+        g_mpu_state == SMP_MPU_FSM_READ_DATA &&
+        Wire.status() == I2C_OK &&
+        (g_mpu_query_timestamp - millis()) >= 50)
     {
         g_mpu.update();
 
         vector_t accel = g_mpu.getAcceleration();
         vector_t gyro = g_mpu.getGyro();
-        attitude_t attitude = g_mpu.getAttitude();
+        //attitude_t attitude = g_mpu.getAttitude();
         float temp = g_mpu.getTemperature();
 
-        Serial.printf("AccelX: %f, AccelY: %f, AccelZ: %f, GyroX: %f, GyroY: %f, GyroZ: %f, Temp: %f\n",
+        /*
+        Serial.printf("MPU6050: AccelX: %f, AccelY: %f, AccelZ: %f, GyroX: %f, GyroY: %f, GyroZ: %f, Temp: %f\n",
             accel.x, accel.y, accel.z,
             gyro.x, gyro.y, gyro.z,
             temp
-        );
+        );*/
 
         accelerometer_data_payload.m_accel_x = accel.x;
         accelerometer_data_payload.m_accel_y = accel.y;
@@ -246,7 +259,21 @@ void loop()
 
         SMP_SEND_PACKET_ACCELEROMETER_DATA(accelerometer_data_payload);
 
-        g_accelerometer_query_timestamp = millis();
+        g_mpu_query_timestamp = millis();
+    }
+    else if (
+        g_mpu_state == SMP_MPU_FSM_INIT &&
+        Wire.status() == I2C_OK
+    )
+    {
+        //Serial.printf("MPU6050 init...\n");
+
+        if (g_mpu.begin())
+        {
+            g_mpu.calibrate();
+
+            g_mpu_state = SMP_MPU_FSM_READ_DATA;
+        }
     }
 #endif
 }
