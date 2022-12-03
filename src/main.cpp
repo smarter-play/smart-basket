@@ -12,6 +12,9 @@
 #define SMP_MPU_FSM_INIT      0
 #define SMP_MPU_FSM_READ_DATA 1
 
+#define SMP_BASKET_FSM_NOT_DETECTED 0
+#define SMP_BASKET_FSM_DETECTED     1
+
 uint32_t g_basket_id;
 
 WiFiClient g_wifi_client; // https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiClient.h
@@ -43,19 +46,21 @@ struct smp_packet_custom_button_payload
 
 // ------------------------------------------------------------------------------------------------
 
-void establish_wifi_connection()
+uint32_t smp_derive_basket_id()
 {
-    if (WiFi.status() != WL_CONNECTED)
+    uint8_t mac[WL_MAC_ADDR_LENGTH];
+    uint8_t digest[20];
+    uint32_t basket_id = 0;
+
+    WiFi.macAddress(mac);
+    sha1(mac, WL_MAC_ADDR_LENGTH * sizeof(uint8_t), digest);
+
+    for (int i = 0; i < 20; i++)
     {
-        Serial.print("Connecting to WiFi...");
-        WiFi.begin(SMP_BRIDGE_AP_SSID, SMP_BRIDGE_AP_PASSWORD);
-        
-        while (WiFi.status() != WL_CONNECTED)
-        {
-            Serial.print(".");
-        }
-        Serial.println("");
+        reinterpret_cast<uint8_t*>(&basket_id)[i % 4] ^= digest[i];
     }
+
+    return basket_id;
 }
 
 bool smp_enter_detected_basket_state()
@@ -110,10 +115,6 @@ void smp_custom_button_handle(
     }
 }
 
-// ------------------------------------------------------------------------------------------------
-// Main
-// ------------------------------------------------------------------------------------------------
-
 void smp_on_custom_button_press(uint32_t custom_button_idx)
 {
     smp_packet_custom_button_payload custom_button_payload{};
@@ -122,27 +123,24 @@ void smp_on_custom_button_press(uint32_t custom_button_idx)
     SMP_SEND_PACKET_CUSTOM_BUTTON(custom_button_payload);
 }
 
-uint32_t smp_derive_basket_id()
+void smp_die()
 {
-    uint8_t mac[WL_MAC_ADDR_LENGTH];
-    uint8_t digest[20];
-    uint32_t basket_id = 0;
-
-    WiFi.macAddress(mac);
-    sha1(mac, WL_MAC_ADDR_LENGTH * sizeof(uint8_t), digest);
-
-    for (int i = 0; i < 20; i++)
-    {
-        reinterpret_cast<uint8_t*>(&basket_id)[i % 4] ^= digest[i];
-    }
-
-    return basket_id;
+    while (true)
+        yield(); // Allow the execution of background functions
 }
+
+// ------------------------------------------------------------------------------------------------
+// Main
+// ------------------------------------------------------------------------------------------------
 
 void setup()
 { 
     Serial.begin(115200);
     Wire.begin();
+
+    // ----------------------------------------------------------------
+    // Calculate Basket ID based on MAC address
+    // ----------------------------------------------------------------
 
     // Basket ID is derived on initialization from WiFi module's MAC address. This is done
     // in order to ensure to always have a unique and permanent Basket ID
@@ -164,6 +162,28 @@ void setup()
 #ifdef SMP_CUSTOM_BUTTON_1
     pinMode(SMP_CUSTOM_BUTTON_1_PIN, INPUT);
 #endif
+
+    // ----------------------------------------------------------------
+    // Connect to AP
+    // ----------------------------------------------------------------
+
+    Serial.printf("Connecting to AP (SSID: %s)...\n", SMP_BRIDGE_AP_SSID);
+
+    WiFi.persistent(false);
+    WiFi.mode(WIFI_STA);
+
+    WiFi.begin(SMP_BRIDGE_AP_SSID, SMP_BRIDGE_AP_PASSWORD);
+
+    while (WiFi.status() != WL_CONNECTED)
+        yield();
+
+    WiFi.setAutoReconnect(true);
+
+    Serial.printf("Connected! SSID: %s, RSSI: %d, IP: %s\n",
+        WiFi.SSID().c_str(),
+        WiFi.RSSI(),
+        WiFi.localIP().toString().c_str()
+    );
 }
 
 void loop()
@@ -171,11 +191,18 @@ void loop()
     smp_packet_basket_payload basket_payload{};
     smp_packet_accelerometer_data_payload accelerometer_data_payload{};
 
-    // Re-try to connect if the connection was lost
-    if (!g_wifi_client.connected())
+    // ----------------------------------------------------------------
+    // Connect to bridge
+    // ----------------------------------------------------------------
+
+    if (WiFi.status() == WL_CONNECTED && !g_wifi_client.connected())
     {
-        //Serial.print("(Re-)establishing TCP connection\n");
-        g_wifi_client.connect(SMP_BRIDGE_IP_ADDRESS, SMP_BRIDGE_PORT);
+        Serial.printf("Establishing TCP connection to %s:%d...", SMP_BRIDGE_IP_ADDRESS, SMP_BRIDGE_PORT);
+
+        if (g_wifi_client.connect(SMP_BRIDGE_IP_ADDRESS, SMP_BRIDGE_PORT))
+            Serial.printf(" Connected\n");
+        else
+            Serial.printf(" Failed\n");
     }
 
     // ----------------------------------------------------------------
