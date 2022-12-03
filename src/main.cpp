@@ -106,10 +106,10 @@ void smp_custom_button_handle(
     int status = digitalRead(pin);
     if (status)
     {
-        fsm_state = custom_button_idx;
+        fsm_state = (int32_t) custom_button_idx;
         pressed_callback(custom_button_idx);
     }
-    else if (fsm_state == custom_button_idx && !status)
+    else if (fsm_state == (int32_t) custom_button_idx && !status)
     {
         fsm_state = -1;
     }
