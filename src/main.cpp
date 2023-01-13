@@ -87,7 +87,7 @@ bool smp_send_packet_wifi(uint8_t packet_type, void* payload, size_t payload_siz
 {
     bool sent = true;
     sent &= g_wifi_client.write(packet_type) > 0;
-    sent &= g_wifi_client.write(SMP_BASKET_COURT) > 0;
+    sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(&g_basket_id), sizeof(uint32_t)) > 0;
     sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(payload), payload_size) > 0;
     return sent;
 }
