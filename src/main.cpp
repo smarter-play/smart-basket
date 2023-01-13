@@ -26,7 +26,7 @@ uint64_t g_basket_detected_timestamp = 0;
 int g_mpu_state = SMP_MPU_FSM_INIT;
 uint64_t g_mpu_query_timestamp = 0;
 
-int32_t g_custom_button_fsm_state = 0;
+int32_t g_custom_button_fsm_state = -1;
 
 struct smp_packet_basket_payload
 {
@@ -96,20 +96,15 @@ bool smp_send_packet_wifi(uint8_t packet_type, void* payload, size_t payload_siz
 #define SMP_SEND_PACKET_ACCELEROMETER_DATA(_payload) smp_send_packet_wifi(SMP_PACKET_TYPE_ACCELEROMETER_DATA, &_payload, sizeof(_payload))
 #define SMP_SEND_PACKET_CUSTOM_BUTTON(_payload)      smp_send_packet_wifi(SMP_PACKET_TYPE_CUSTOM_BUTTON, &_payload, sizeof(_payload))
 
-void smp_custom_button_handle(
-    int32_t& fsm_state,
-    uint32_t custom_button_idx,
-    uint8_t pin,
-    void(*pressed_callback)(uint32_t)
-)
+void smp_custom_button_handle(int32_t& fsm_state, uint32_t custom_button_idx, uint8_t pin, void(*pressed_callback)(uint32_t))
 {
-    int status = digitalRead(pin);
-    if (status)
+    int pressed = (~digitalRead(pin)) & 1;
+    if (fsm_state != (int32_t) custom_button_idx && pressed)
     {
         fsm_state = (int32_t) custom_button_idx;
         pressed_callback(custom_button_idx);
     }
-    else if (fsm_state == (int32_t) custom_button_idx && !status)
+    else if (fsm_state == (int32_t) custom_button_idx && !pressed)
     {
         fsm_state = -1;
     }
@@ -155,13 +150,8 @@ void setup()
     pinMode(SMP_PHOTO_DIODE_1_PIN, INPUT);
 #endif
 
-#ifdef SMP_CUSTOM_BUTTON_0
     pinMode(SMP_CUSTOM_BUTTON_0_PIN, INPUT);
-#endif
-
-#ifdef SMP_CUSTOM_BUTTON_1
     pinMode(SMP_CUSTOM_BUTTON_1_PIN, INPUT);
-#endif
 
     // ----------------------------------------------------------------
     // Connect to AP
@@ -234,13 +224,8 @@ void loop()
     // Custom buttons
     // ----------------------------------------------------------------
 
-#ifdef SMP_CUSTOM_BUTTON_0
     smp_custom_button_handle(g_custom_button_fsm_state, 0, SMP_CUSTOM_BUTTON_0_PIN, smp_on_custom_button_press);
-#endif
-
-#ifdef SMP_CUSTOM_BUTTON_1
     smp_custom_button_handle(g_custom_button_fsm_state, 1, SMP_CUSTOM_BUTTON_1_PIN, smp_on_custom_button_press);
-#endif
 
     // ----------------------------------------------------------------
     // Accelerometer
