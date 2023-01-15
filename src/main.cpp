@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <math.h>
 
 #include <ESP8266WiFi.h>
 #include <Wire.h>
@@ -15,6 +16,9 @@
 #define SMP_BASKET_FSM_NOT_DETECTED 0
 #define SMP_BASKET_FSM_DETECTED     1
 
+#define SMP_MPU_MOVEMENT_THRESHOLD 1.0f
+#define SMP_MPU_SEND_PACKET_DELAY 500
+
 uint32_t g_basket_id;
 
 WiFiClient g_wifi_client; // https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266WiFi/src/WiFiClient.h
@@ -25,6 +29,7 @@ uint64_t g_basket_detected_timestamp = 0;
 
 int g_mpu_state = SMP_MPU_FSM_INIT;
 uint64_t g_mpu_query_timestamp = 0;
+uint64_t g_mpu_sent_packet_timestamp = 0;
 
 int32_t g_custom_button_fsm_state = -1;
 
@@ -86,9 +91,14 @@ bool smp_exit_detected_basket_state()
 bool smp_send_packet_wifi(uint8_t packet_type, void* payload, size_t payload_size)
 {
     bool sent = true;
-    sent &= g_wifi_client.write(packet_type) > 0;
-    sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(&g_basket_id), sizeof(uint32_t)) > 0;
-    sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(payload), payload_size) > 0;
+    sent &= g_wifi_client.write(packet_type) == 1;
+    sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(&g_basket_id), sizeof(uint32_t)) == sizeof(uint32_t);
+    if (payload_size > 0)
+        sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(payload), payload_size) == payload_size;
+
+    if (!sent)
+        Serial.printf("ERROR: Packet of type %d couldn't be sent\n", packet_type);
+
     return sent;
 }
 
@@ -254,22 +264,29 @@ void loop()
         //attitude_t attitude = g_mpu.getAttitude();
         float temp = g_mpu.getTemperature();
 
-        /*
-        Serial.printf("MPU6050: AccelX: %f, AccelY: %f, AccelZ: %f, GyroX: %f, GyroY: %f, GyroZ: %f, Temp: %f\n",
-            accel.x, accel.y, accel.z,
-            gyro.x, gyro.y, gyro.z,
-            temp
-        );*/
+        if (
+            (abs(accel.x) > SMP_MPU_MOVEMENT_THRESHOLD || abs(accel.y) > SMP_MPU_MOVEMENT_THRESHOLD || abs(accel.z) > SMP_MPU_MOVEMENT_THRESHOLD) &&
+            (millis() - g_mpu_sent_packet_timestamp) >= SMP_MPU_SEND_PACKET_DELAY
+        )
+        {
+            Serial.printf("MPU6050: AccelX: %f, AccelY: %f, AccelZ: %f, GyroX: %f, GyroY: %f, GyroZ: %f, Temp: %f\n",
+                accel.x, accel.y, accel.z,
+                gyro.x, gyro.y, gyro.z,
+                temp
+            );
 
-        accelerometer_data_payload.m_accel_x = accel.x;
-        accelerometer_data_payload.m_accel_y = accel.y;
-        accelerometer_data_payload.m_accel_z = accel.z;
-        accelerometer_data_payload.m_gyro_x  = gyro.x;
-        accelerometer_data_payload.m_gyro_y  = gyro.y;
-        accelerometer_data_payload.m_gyro_z  = gyro.z;
-        accelerometer_data_payload.m_temp    = temp;
+            accelerometer_data_payload.m_accel_x = accel.x;
+            accelerometer_data_payload.m_accel_y = accel.y;
+            accelerometer_data_payload.m_accel_z = accel.z;
+            accelerometer_data_payload.m_gyro_x  = gyro.x;
+            accelerometer_data_payload.m_gyro_y  = gyro.y;
+            accelerometer_data_payload.m_gyro_z  = gyro.z;
+            accelerometer_data_payload.m_temp    = temp;
 
-        SMP_SEND_PACKET_ACCELEROMETER_DATA(accelerometer_data_payload);
+            SMP_SEND_PACKET_ACCELEROMETER_DATA(accelerometer_data_payload);
+
+            g_mpu_sent_packet_timestamp = millis();
+        }
 
         g_mpu_query_timestamp = millis();
     }
