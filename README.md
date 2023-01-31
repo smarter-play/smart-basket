@@ -62,7 +62,7 @@ The Featherboard is an external board that performs People Detection and will si
 
 The Featherboard output is read from the `P3_1` and can be powered through the `VBUS` pin. But where do we get 5V to power it?
 
-### 9V-5V Voltage Regulator
+### 9V to 5V Voltage Regulator
 
 We use a Voltage Regulator to convert the Power Supply's 9V to 5V that will be used to power the Featherboard.
 
