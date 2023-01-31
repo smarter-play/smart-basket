@@ -24,7 +24,7 @@ The `Type` field specifies how the `Payload` data will be formatted. Below a lis
 
 ## Packet type: Custom button (0x02)
 
-`Paylaod`:
+`Payload`:
 - `Custom button index` (uint)
 
 
