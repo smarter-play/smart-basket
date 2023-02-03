@@ -1,45 +1,21 @@
 #ifndef _SMP_SMART_BASKET_H
 #define _SMP_SMART_BASKET_H
 
-// ------------------------------------------------------------------------------------------------
-// Constants
-// ------------------------------------------------------------------------------------------------
-
-#if defined(SMP_PHOTO_DIODE_0) || defined(SMP_PHOTO_DIODE_1)
-#   define SMP_DETECT_BASKET
-#endif
-
-// D1: I2C's SCL
-// D2: I2C's SDA
+// D0 (GPIO16) - On-board LED
+// D1 - I2C's SCL
+// D2 - I2C's SDA
+// D3 (GPIO0) - FLASH
+#define SMP_LED0 D0
+#define SMP_LED1 D4
+#define SMP_FEATHERBOARD_PIN 10
 #define SMP_PHOTO_DIODE_0_PIN D5
-//#define SMP_PHOTO_DIODE_1_PIN D6
 #define SMP_CUSTOM_BUTTON_0_PIN D6
 #define SMP_CUSTOM_BUTTON_1_PIN D7
-#define SMP_ACCELEROMETER_I2C_ADDRESS 0x68
+// D8 (GPIO15)
 
 #define SMP_PACKET_TYPE_BASKET             0x00
 #define SMP_PACKET_TYPE_ACCELEROMETER_DATA 0x01
 #define SMP_PACKET_TYPE_CUSTOM_BUTTON      0x02
-#define SMP_PACKET_TYPE_MAC_ADDRESS        0x03
-
-// ------------------------------------------------------------------------------------------------
-// Firmware configuration
-// ------------------------------------------------------------------------------------------------
-
-// Comment out one of the following lines to disable a peripheral:
-
-#define SMP_PHOTO_DIODE_0
-//#define SMP_PHOTO_DIODE_1
-//#define SMP_CUSTOM_BUTTON_0
-//#define SMP_CUSTOM_BUTTON_1
-#define SMP_ACCELEROMETER
-
-#define SMP_DEBUG
-
-#if defined(SMP_PHOTO_DIODE_0) || defined(SMP_PHOTO_DIODE_1)
-#   define SMP_DETECT_BASKET
-#endif
-
-// ------------------------------------------------------------------------------------------------
+#define SMP_PACKET_TYPE_PEOPLE_DETECTED    0x03
 
 #endif // _SMP_SMART_BASKET_H

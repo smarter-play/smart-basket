@@ -33,6 +33,10 @@ uint64_t g_mpu_sent_packet_timestamp = 0;
 
 int32_t g_custom_button_fsm_state = -1;
 
+int32_t g_people_detected_fsm = 0;
+
+uint64_t g_last_packet_sent_at = 0;
+
 struct smp_packet_basket_payload
 {
 };
@@ -47,6 +51,10 @@ struct smp_packet_accelerometer_data_payload
 struct smp_packet_custom_button_payload
 {
     uint32_t m_button_idx;
+};
+
+struct smp_packet_people_detected_payload
+{
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -71,15 +79,7 @@ uint32_t smp_derive_basket_id()
 bool smp_enter_detected_basket_state()
 {
     uint32_t detected = 0;
-
-#ifdef SMP_PHOTO_DIODE_0
     detected |= digitalRead(SMP_PHOTO_DIODE_0_PIN);
-#endif
-
-#ifdef SMP_PHOTO_DIODE_1
-    detected |= digitalRead(SMP_PHOTO_DIODE_1_PIN);
-#endif
-
     return !detected;
 }
 
@@ -99,12 +99,20 @@ bool smp_send_packet_wifi(uint8_t packet_type, void* payload, size_t payload_siz
     if (!sent)
         Serial.printf("ERROR: Packet of type %d couldn't be sent\n", packet_type);
 
+    //Serial.printf("Packet type: %x - Basket ID: %x\n", packet_type, g_basket_id);
+
+    g_wifi_client.flush();
+
+    digitalWrite(SMP_LED1, LOW);
+    g_last_packet_sent_at = millis();
+
     return sent;
 }
 
 #define SMP_SEND_PACKET_BASKET(_payload)             smp_send_packet_wifi(SMP_PACKET_TYPE_BASKET, &_payload, sizeof(_payload))
 #define SMP_SEND_PACKET_ACCELEROMETER_DATA(_payload) smp_send_packet_wifi(SMP_PACKET_TYPE_ACCELEROMETER_DATA, &_payload, sizeof(_payload))
 #define SMP_SEND_PACKET_CUSTOM_BUTTON(_payload)      smp_send_packet_wifi(SMP_PACKET_TYPE_CUSTOM_BUTTON, &_payload, sizeof(_payload))
+#define SMP_SEND_PACKET_PEOPLE_DETECTED(_payload)    smp_send_packet_wifi(SMP_PACKET_TYPE_PEOPLE_DETECTED, &_payload, sizeof(_payload))
 
 void smp_custom_button_handle(int32_t& fsm_state, uint32_t custom_button_idx, uint8_t pin, void(*pressed_callback)(uint32_t))
 {
@@ -139,7 +147,7 @@ void smp_die()
 // ------------------------------------------------------------------------------------------------
 
 void setup()
-{ 
+{
     Serial.begin(115200);
     Wire.begin();
 
@@ -152,32 +160,45 @@ void setup()
     g_basket_id = smp_derive_basket_id();
     Serial.printf("Derived basket ID: %d\n", g_basket_id);
 
-#ifdef SMP_PHOTO_DIODE_0
+    pinMode(SMP_LED0, OUTPUT);
+    pinMode(SMP_LED1, OUTPUT);
+    pinMode(SMP_FEATHERBOARD_PIN, INPUT);
     pinMode(SMP_PHOTO_DIODE_0_PIN, INPUT);
-#endif
-
-#ifdef SMP_PHOTO_DIODE_1
-    pinMode(SMP_PHOTO_DIODE_1_PIN, INPUT);
-#endif
-
     pinMode(SMP_CUSTOM_BUTTON_0_PIN, INPUT);
     pinMode(SMP_CUSTOM_BUTTON_1_PIN, INPUT);
+
+    digitalWrite(SMP_LED0, HIGH);
+    digitalWrite(SMP_LED1, HIGH);
 
     // ----------------------------------------------------------------
     // Connect to AP
     // ----------------------------------------------------------------
 
-    Serial.printf("Connecting to AP (SSID: %s)...\n", SMP_BRIDGE_AP_SSID);
+    Serial.printf("Connecting to AP (SSID: %s)...", SMP_BRIDGE_AP_SSID);
+
+    digitalWrite(SMP_LED0, LOW);
 
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
 
     WiFi.begin(SMP_BRIDGE_AP_SSID, SMP_BRIDGE_AP_PASSWORD);
 
+    bool led0_status = true;
     while (WiFi.status() != WL_CONNECTED)
-        yield();
+    {
+        // Blink LED0 while connecting to AP
+        digitalWrite(SMP_LED0, led0_status ? LOW : HIGH);
+        led0_status = !led0_status;
+
+        Serial.printf(".");
+
+        delay(1000);
+    }
 
     WiFi.setAutoReconnect(true);
+    
+    Serial.printf("\n");
+    digitalWrite(SMP_LED0, LOW); // Keep LED0 lit
 
     Serial.printf("Connected! SSID: %s, RSSI: %d, IP: %s\n",
         WiFi.SSID().c_str(),
@@ -190,6 +211,7 @@ void loop()
 {
     smp_packet_basket_payload basket_payload{};
     smp_packet_accelerometer_data_payload accelerometer_data_payload{};
+    smp_packet_people_detected_payload people_detected_payload{};
 
     // ----------------------------------------------------------------
     // Connect to bridge
@@ -209,7 +231,6 @@ void loop()
     // Detect the basket
     // ----------------------------------------------------------------
 
-#ifdef SMP_DETECT_BASKET
     if (g_basket_fsm_state == SMP_BASKET_FSM_NOT_DETECTED && smp_enter_detected_basket_state())
     {
         Serial.printf("Basket detected\n");
@@ -228,7 +249,6 @@ void loop()
     {
         g_basket_fsm_state = SMP_BASKET_FSM_NOT_DETECTED;
     }
-#endif
 
     // ----------------------------------------------------------------
     // Custom buttons
@@ -238,16 +258,32 @@ void loop()
     smp_custom_button_handle(g_custom_button_fsm_state, 1, SMP_CUSTOM_BUTTON_1_PIN, smp_on_custom_button_press);
 
     // ----------------------------------------------------------------
+    // Detect people
+    // ----------------------------------------------------------------
+
+    int people_detected = (~digitalRead(SMP_FEATHERBOARD_PIN)) & 1;
+    if (people_detected && g_people_detected_fsm == 0)
+    {
+        Serial.printf("People detected\n");
+        
+        SMP_SEND_PACKET_PEOPLE_DETECTED(people_detected_payload);
+        g_people_detected_fsm = 1;
+    }
+    else if (!people_detected && g_people_detected_fsm == 1)
+    {
+        g_people_detected_fsm = 0;
+    }
+
+    // ----------------------------------------------------------------
     // Accelerometer
     // ----------------------------------------------------------------
 
-#ifdef SMP_ACCELEROMETER
     if (
         Wire.status() == I2C_OK &&
         !g_mpu.available()
     )
     {
-        //Serial.printf("MPU6050 lost\n");
+        //Serial.printf("MPU6050 lost - Wire status: %d, MPU available: %d\n", Wire.status(), g_mpu.available());
 
         g_mpu_state = SMP_MPU_FSM_INIT;
     }
@@ -295,7 +331,7 @@ void loop()
         Wire.status() == I2C_OK
     )
     {
-        //Serial.printf("MPU6050 init...\n");
+        //Serial.printf("MPU6050 init...");
 
         if (g_mpu.begin())
         {
@@ -304,5 +340,11 @@ void loop()
             g_mpu_state = SMP_MPU_FSM_READ_DATA;
         }
     }
-#endif
+    
+    // ----------------------------------------------------------------
+
+    if ((millis() - g_last_packet_sent_at) >= 200)
+    {
+        digitalWrite(SMP_LED1, HIGH);
+    }
 }
