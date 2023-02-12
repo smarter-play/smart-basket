@@ -39,6 +39,7 @@ uint64_t g_last_packet_sent_at = 0;
 
 struct smp_packet_basket_payload
 {
+    uint8_t m_; // Here to make explicit that an empty struct will always take 1 byte
 };
 
 struct smp_packet_accelerometer_data_payload
@@ -55,6 +56,7 @@ struct smp_packet_custom_button_payload
 
 struct smp_packet_people_detected_payload
 {
+    uint8_t m_;
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -90,16 +92,18 @@ bool smp_exit_detected_basket_state()
 
 bool smp_send_packet_wifi(uint8_t packet_type, void* payload, size_t payload_size)
 {
+    assert(payload != nullptr);
+    assert(payload_size > 0);
+
     bool sent = true;
     sent &= g_wifi_client.write(packet_type) == 1;
     sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(&g_basket_id), sizeof(uint32_t)) == sizeof(uint32_t);
-    if (payload_size > 0)
-        sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(payload), payload_size) == payload_size;
+    sent &= g_wifi_client.write(reinterpret_cast<uint8_t*>(payload), payload_size) == payload_size;
 
     if (!sent)
         Serial.printf("ERROR: Packet of type %d couldn't be sent\n", packet_type);
 
-    //Serial.printf("Packet type: %x - Basket ID: %x\n", packet_type, g_basket_id);
+    //Serial.printf("Packet type: %x - Basket ID: %x - Payload size: %d\n", packet_type, g_basket_id, payload_size);
 
     g_wifi_client.flush();
 
@@ -130,6 +134,8 @@ void smp_custom_button_handle(int32_t& fsm_state, uint32_t custom_button_idx, ui
 
 void smp_on_custom_button_press(uint32_t custom_button_idx)
 {
+    Serial.printf("Custom button pressed: %d\n", custom_button_idx);
+
     smp_packet_custom_button_payload custom_button_payload{};
     custom_button_payload.m_button_idx = custom_button_idx;
 
