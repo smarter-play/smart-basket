@@ -16,7 +16,7 @@
 #define SMP_BASKET_FSM_NOT_DETECTED 0
 #define SMP_BASKET_FSM_DETECTED     1
 
-#define SMP_MPU_MOVEMENT_THRESHOLD 1.0f
+#define SMP_MPU_MOVEMENT_THRESHOLD 0.6f
 #define SMP_MPU_SEND_PACKET_DELAY 500
 
 uint32_t g_basket_id;
@@ -300,8 +300,10 @@ void loop()
         //attitude_t attitude = g_mpu.getAttitude();
         float temp = g_mpu.getTemperature();
 
+
+        // If the acceleration is greater than a threshold considering one axis' acceleration is Earth's gravity
         if (
-            (abs(accel.x) > SMP_MPU_MOVEMENT_THRESHOLD || abs(accel.y) > SMP_MPU_MOVEMENT_THRESHOLD || abs(accel.z) > SMP_MPU_MOVEMENT_THRESHOLD) &&
+            (abs(accel.x) > SMP_MPU_MOVEMENT_THRESHOLD || abs(accel.y) > SMP_MPU_MOVEMENT_THRESHOLD /*|| abs(accel.z) > SMP_MPU_MOVEMENT_THRESHOLD*/) &&
             (millis() - g_mpu_sent_packet_timestamp) >= SMP_MPU_SEND_PACKET_DELAY
         )
         {
@@ -335,6 +337,9 @@ void loop()
 
         if (g_mpu.begin())
         {
+            g_mpu.setAccConfig(0);  // +-2g
+            g_mpu.setGyroConfig(0); // Don't care about Gyro measurements
+
             g_mpu.calibrate();
 
             g_mpu_state = SMP_MPU_FSM_READ_DATA;
