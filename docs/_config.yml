@@ -1,0 +1,10 @@
+theme: minima
+
+author: SmarterPlay
+
+header_pages:
+  - index.md
+  - gallery.md
+  - schematic.md
+  - firmware.md
+  - protocol.md
