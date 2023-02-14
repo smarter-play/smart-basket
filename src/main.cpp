@@ -157,15 +157,11 @@ void setup()
     Serial.begin(115200);
     Wire.begin();
 
-    // ----------------------------------------------------------------
-    // Calculate Basket ID based on MAC address
-    // ----------------------------------------------------------------
-
-    // Basket ID is derived on initialization from WiFi module's MAC address. This is done
-    // in order to ensure to always have a unique and permanent Basket ID
+    // Derive the Basket ID based from the MAC address
     g_basket_id = smp_derive_basket_id();
     Serial.printf("Derived basket ID: %d\n", g_basket_id);
 
+    // PIN initialization
     pinMode(SMP_LED0, OUTPUT);
     pinMode(SMP_LED1, OUTPUT);
     pinMode(SMP_FEATHERBOARD_PIN, INPUT);
@@ -173,21 +169,19 @@ void setup()
     pinMode(SMP_CUSTOM_BUTTON_0_PIN, INPUT);
     pinMode(SMP_CUSTOM_BUTTON_1_PIN, INPUT);
 
+    // Turn off LEDs
     digitalWrite(SMP_LED0, HIGH);
     digitalWrite(SMP_LED1, HIGH);
 
-    // ----------------------------------------------------------------
     // Connect to AP
-    // ----------------------------------------------------------------
-
-    Serial.printf("Connecting to AP (SSID: %s)...", SMP_BRIDGE_AP_SSID);
+    Serial.printf("Connecting to AP (SSID: %s)...", SMP_AP_SSID);
 
     digitalWrite(SMP_LED0, LOW);
 
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
 
-    WiFi.begin(SMP_BRIDGE_AP_SSID, SMP_BRIDGE_AP_PASSWORD);
+    WiFi.begin(SMP_AP_SSID, SMP_AP_PASSWORD);
 
     bool led0_status = true;
     while (WiFi.status() != WL_CONNECTED)
@@ -354,6 +348,7 @@ void loop()
     
     // ----------------------------------------------------------------
 
+    // After some time turn off the LED (if was on) that indicates that a packet was sent
     if ((millis() - g_last_packet_sent_at) >= 200)
     {
         digitalWrite(SMP_LED1, HIGH);
