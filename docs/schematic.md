@@ -7,11 +7,11 @@ layout: default
 ## Power supply
 
 The power supply must be able to provide 9V and it must be able to support the circuit functionalities. We haven't measured the minimum required power,
-for our prototype we sticked to a power supply able to provide up to 3A.
+for our prototype we sticked to a power supply able to provide up to 850mA.
 
 ## The MCU
 
-The SmartBasket logic and connectivity is performed by an ESP8266, mounted on a NodeMCU board. The MCU is powered directly from the external 9V power supply throughout the `Vin` pin. The built-in voltage regulator, mounted on the NodeMCU board, will provide 3.3V output.
+The SmartBasket logic and connectivity is performed by an ESP8266, mounted on a NodeMCU board. The MCU is powered throughout the `Vin` pin and the `EPS` switch permits to turn off the external power supply whether the MCU is powered from the USB port. The on-board voltage regulator will provide 3.3V output.
 
 <p align="center">
   <img src="./assets/images/schematic/mcu.png">
@@ -39,7 +39,7 @@ The SmartBasket provides two custom buttons that enable the users to interact wi
 
 ### Accelerometer
 
-The SmartBasket mounts also an accelerometer whose objective is to detect the oscillations of the backboard and provide additional information to evaluate whether the basket is being used or not. The module used is GY-521 that embeds an MPU6050. It communicates with the MCU through an I2C bus (two wires: SCL and SDA).
+The SmartBasket also mounts an accelerometer whose objective is to detect the oscillations of the backboard and provide additional information to evaluate whether the basket is being used or not. The module used is GY-521 that embeds an MPU6050. It communicates with the MCU through an I2C bus (two wires: SCL and SDA).
 
 <p align="center">
   <img src="./assets/images/schematic/accelerometer.png">
@@ -68,7 +68,7 @@ The Featherboard output is read from the `P3_1` and can be powered through the `
 
 ## 9V to 5V Voltage Regulator
 
-We use a Voltage Regulator to convert the Power Supply's 9V to 5V that will be used to power the Featherboard.
+We use a Voltage Regulator to convert the Power Supply's 9V to 5V that will be used to power the Featherboard and the MCU.
 
 <p align="center">
   <img src="./assets/images/schematic/voltage_regulator.png">
