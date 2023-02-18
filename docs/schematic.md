@@ -18,14 +18,16 @@ The SmartBasket logic and connectivity is performed by an ESP8266, mounted on a 
 </p>
 
 As shown in the diagram above, the GPIOs are organized the following way:
+- `D0`: -
 - `D1`: I2C's SCL
 - `D2`: I2C's SDA
 - `D3`: -
-- `D4`: digital input from the Featherboard (1 if a person is detected)
+- `D4`: -
 - `D5`: digital input from IR Detector (0 if the ball is passing through the basket)
 - `D6`: digital input from CustomButton0 (0 if pressed)
 - `D7`: digital input from CustomButton1 (0 if pressed)
 - `D8`: -
+- `SDD3 (GPIO10)`: digital input from the Featherboard (1 if a person is detected)
 
 ## Custom button(s)
 
@@ -72,7 +74,7 @@ We use a Voltage Regulator to convert the Power Supply's 9V to 5V that will be u
   <img src="./assets/images/schematic/voltage_regulator.png">
 </p>
 
-`PL0` shows the status of the 9V supply, while `PL1` shows the status of the 5V supply. The circuit and capacity values have been took from the [regulator's datasheet](https://www.mouser.it/datasheet/2/389/l78s-974158.pdf).
+The circuit and capacities values have been taken from the [regulator's datasheet](https://www.mouser.it/datasheet/2/389/l78s-974158.pdf).
 
 
 
